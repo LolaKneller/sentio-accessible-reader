@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sentio Accessible Reader</title>
+<style>
+  body { font-family: sans-serif; background-color: #f4f6f8; color: #333; padding: 20px; max-width: 600px; margin: auto; line-height: 1.6; }
+  .controls { margin-bottom: 20px; background: #ffffff; padding: 15px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.05); }
+  label { display: block; margin-top: 10px; font-size: 0.9rem; }
+  #textDisplay span.active-word { background-color: #fff8c4; animation: fadeScale 0.5s ease; border-radius: 4px; }
+  @keyframes fadeScale {
+    0% { opacity: 0.5; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.1); }
+    100% { opacity: 1; transform: scale(1); }
+  }
+  #progress { margin-top: 10px; font-size: 0.9rem; color: #555; }
+</style>
+</head>
+<body>
+<h2>Sentio Accessible Reader</h2>
+
+<div class="controls">
+  <label for="voiceSelect">Choose Voice:</label>
+  <select id="voiceSelect"></select>
+
+  <label for="speedControl">Speed: <span id="speedDisplay">1x</span></label>
+  <input type="range" id="speedControl" min="0.5" max="1.5" step="0.1" value="1">
+
+  <button id="playBtn">Play</button>
+  <button id="pauseBtn">Pause</button>
+  <button id="stopBtn">Stop</button>
+
+  <div id="progress">Progress: 0%</div>
+</div>
+
+<textarea id="textInput" rows="6" style="width:100%; padding:10px; border-radius:8px; border:1px solid #ccc;" placeholder="Paste or type text here to read aloud..."></textarea>
+
+<div id="textDisplay" style="margin-top:20px;"></div>
+
+<script>
+const synth = window.speechSynthesis;
+let voices = [];
+const voiceSelect = document.getElementById('voiceSelect');
+const speedControl = document.getElementById('speedControl');
+const speedDisplay = document.getElementById('speedDisplay');
+const playBtn = document.getElementById('playBtn');
+const pauseBtn = document.getElementById('pauseBtn');
+const stopBtn = document.getElementById('stopBtn');
+const textInput = document.getElementById('textInput');
+const textDisplay = document.getElementById('textDisplay');
+const progressDisplay = document.getElementById('progress');
+
+function populateVoices() {
+  voices = synth.getVoices();
+  voiceSelect.innerHTML = '';
+  voices.forEach((voice, index) => {
+    const option = document.createElement('option');
+    option.textContent = `${voice.name} (${voice.lang})`;
+    option.value = index;
+    voiceSelect.appendChild(option);
+  });
+  const savedVoice = localStorage.getItem('voiceSelect');
+  if(savedVoice) voiceSelect.value = savedVoice;
+}
+
+populateVoices();
+if (speechSynthesis.onvoiceschanged !== undefined) {
+  speechSynthesis.onvoiceschanged = populateVoices;
+}
+
+speedControl.addEventListener('input', () => {
+  speedDisplay.textContent = speedControl.value + 'x';
+  localStorage.setItem('speedControl', speedControl.value);
+});
+
+voiceSelect.addEventListener('change', () => {
+  localStorage.setItem('voiceSelect', voiceSelect.value);
+});
+
+if(localStorage.getItem('speedControl')){
+  speedControl.value = localStorage.getItem('speedControl');
+  speedDisplay.textContent = speedControl.value + 'x';
+}
+
+let utterance;
+let currentIndex = 0;
+
+function speakText() {
+  const textToRead = textInput.value.trim();
+  if(!textToRead){ alert('Please enter text to read.'); return; }
+  const words = textToRead.split(' ');
+  textDisplay.innerHTML = words.map((word, index) => `<span id='word-${index}'>${word} </span>`).join('');
+
+  utterance = new SpeechSynthesisUtterance(textToRead);
+  utterance.voice = voices[voiceSelect.value];
+  utterance.rate = parseFloat(speedControl.value);
+
+  utterance.onboundary = (event) => {
+    if(event.name === 'word'){ highlightWord(currentIndex, words.length); currentIndex++; }
+  };
+
+  utterance.onend = () => { progressDisplay.textContent = 'Progress: 100%'; currentIndex = 0; };
+  utterance.onerror = (e) => { console.error('Speech synthesis error:', e.error); alert('An error occurred with speech synthesis. Please try again.'); };
+
+  synth.speak(utterance);
+}
+
+function highlightWord(index, total) {
+  const currentSpan = document.getElementById(`word-${index}`);
+  if(currentSpan){
+    currentSpan.classList.add('active-word');
+    setTimeout(() => { currentSpan.classList.remove('active-word'); }, 600);
+  }
+  const progress = Math.min(((index + 1) / total) * 100, 100).toFixed(0);
+  progressDisplay.textContent = `Progress: ${progress}%`;
+}
+
+playBtn.addEventListener('click', () => {
+  if(synth.speaking){ synth.resume(); } else { speakText(); }
+});
+
+pauseBtn.addEventListener('click', () => {
+  if(synth.speaking) synth.pause();
+});
+
+stopBtn.addEventListener('click', () => {
+  synth.cancel();
+  currentIndex = 0;
+  progressDisplay.textContent = 'Progress: 0%';
+});
+</script>
+</body>
+</html>      
